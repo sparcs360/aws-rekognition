@@ -1,0 +1,62 @@
+{
+  "FaceDetails": [
+    {
+      "BoundingBox": {
+        "Width": 0.2608173191547394,
+        "Height": 0.3493589758872986,
+        "Left": 0.47836539149284363,
+        "Top": 0.5144230723381042
+      },
+      "Landmarks": [
+        {
+          "Type": "eyeLeft",
+          "X": 0.5619285702705383,
+          "Y": 0.6376397609710693
+        },
+        {
+          "Type": "eyeRight",
+          "X": 0.6589825749397278,
+          "Y": 0.6348352432250977
+        },
+        {
+          "Type": "nose",
+          "X": 0.6094828844070435,
+          "Y": 0.7094017863273621
+        },
+        {
+          "Type": "mouthLeft",
+          "X": 0.5729176998138428,
+          "Y": 0.7820645570755005
+        },
+        {
+          "Type": "mouthRight",
+          "X": 0.6447758078575134,
+          "Y": 0.7853260636329651
+        }
+      ],
+      "Pose": {
+        "Roll": -1.7449500560760498,
+        "Yaw": 1.3308435678482056,
+        "Pitch": 3.0694613456726074
+      },
+      "Quality": {
+        "Brightness": 35.791297912597656,
+        "Sharpness": 99.47134399414062
+      },
+      "Confidence": 99.99851989746094
+    }
+  ],
+  "OrientationCorrection": "ROTATE_0",
+  "ResponseMetadata": {
+    "RequestId": "4d24b113-4648-11e8-a113-1970d79dfee8",
+    "HTTPStatusCode": 200,
+    "HTTPHeaders": {
+      "content-type": "application/x-amz-json-1.1",
+      "date": "Sun, 22 Apr 2018 16:14:57 GMT",
+      "x-amzn-requestid": "4d24b113-4648-11e8-a113-1970d79dfee8",
+      "content-length": "712",
+      "connection": "keep-alive"
+    },
+    "RetryAttempts": 0
+  }
+}
