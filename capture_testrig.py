@@ -4,6 +4,7 @@ import numpy as np
 import boto3
 from botocore.exceptions import ClientError
 
+
 def parse_command_line():
     import re
 
@@ -34,7 +35,6 @@ def video_frame_to_jpeg_string(frame):
 
 
 def detect_objects(frame):
-    print('Detecting objects...')
     request = {'Bytes': video_frame_to_jpeg_string(frame)}
     response = client.detect_labels(Image=request)
     for object in response['Labels']:
@@ -71,20 +71,24 @@ class Face:
 
 
 def detect_faces(frame, faces):
-    print('Detecting faces...')
     image = {'Bytes': video_frame_to_jpeg_string(frame)}
     response = client.detect_faces(Image=image)
     for face_detail in response['FaceDetails']:
         faces.append(Face(box=face_detail['BoundingBox'], landmarks=face_detail['Landmarks']))
 
 
-def index_faces(frame, collection_id, face_name):
+def index_face(frame, collection_id, face_name):
     if face_name == "NOONE":
         print("Can't index unless you specify --face-name")
         return
 
-    print('Indexing faces...')
     image = {'Bytes': video_frame_to_jpeg_string(frame)}
+
+    response = client.detect_faces(Image=image)
+    if len(response['FaceDetails']) != 1:
+        print("Indexing only allowed when one face detected (found {})".format(len(response['FaceDetails'])))
+        return
+
     response = client.index_faces(
         CollectionId=collection_id,
         Image=image,
@@ -95,7 +99,6 @@ def index_faces(frame, collection_id, face_name):
 
 
 def recognise_faces(frame, collection_id, faces):
-    print('Looking for known faces...')
     image = {'Bytes': video_frame_to_jpeg_string(frame)}
 
     try:
@@ -132,15 +135,19 @@ if __name__ == "__main__":
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord('o'):
+            print('Detecting objects...')
             detect_objects(frame)
 
         if key == ord('f'):
+            print('Detecting faces...')
             detect_faces(frame, faces)
 
         if key == ord('i'):
-            index_faces(frame, args.collection_id, args.face_name)
+            print('Indexing face...')
+            index_face(frame, args.collection_id, args.face_name)
 
         if key == ord('r'):
+            print('Looking for known faces...')
             recognise_faces(frame, args.collection_id, faces)
 
         if key == ord('q'):
