@@ -68,6 +68,7 @@ class Face:
                 MaxFaces=1
             )
         except ClientError as e:
+            self.caption = "UNKNOWN"
             print("{}".format(e))
             return
 
