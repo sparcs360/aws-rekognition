@@ -43,7 +43,25 @@ class Face:
         height = int(bounding_box['Height'] * HEIGHT)
         self.right = self.left + width
         self.bottom = self.top + height
+
+        self.landmarks = [
+            (int(landmark['X'] * WIDTH), int(landmark['Y'] * HEIGHT)) for landmark in face_detail['Landmarks']
+        ]
+
         self.facebox_alpha = 1.0
+
+    def draw_overlay(self, frame):
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (self.left, self.top), (self.right, self.bottom), (0, 0, 255), 2)
+        cv2.rectangle(overlay, (self.left, self.bottom), (self.right, self.bottom), (0, 0, 255), cv2.FILLED)
+        cv2.putText(overlay, "face", (self.left + 6, self.bottom - 6), FONT, 1.0, (255, 255, 255), 1)
+        for (x, y) in self.landmarks:
+            cv2.circle(overlay, (x, y), 4, (255, 0, 0), cv2.FILLED)
+        self.facebox_alpha = self.facebox_alpha - 0.01
+        cv2.addWeighted(overlay, self.facebox_alpha, frame, 1 - self.facebox_alpha, 0, frame)
+
+
+
 
 
 def detect_faces(frame, faces):
@@ -78,15 +96,9 @@ if __name__ == "__main__":
             print("Quitting")
             break
 
-        print("face_count={}".format(len(faces)))
         if faces:
             for face in faces:
-                overlay = frame.copy()
-                cv2.rectangle(overlay, (face.left, face.top), (face.right, face.bottom), (0, 0, 255), 2)
-                cv2.rectangle(overlay, (face.left, face.bottom), (face.right, face.bottom), (0, 0, 255), cv2.FILLED)
-                cv2.putText(overlay, "face", (face.left + 6, face.bottom - 6), FONT, 1.0, (255, 255, 255), 1)
-                face.facebox_alpha = face.facebox_alpha - 0.01
-                cv2.addWeighted(overlay, face.facebox_alpha, frame, 1 - face.facebox_alpha, 0, frame)
+                face.draw_overlay(frame)
             faces = [face for face in faces if face.facebox_alpha > 0]
 
         cv2.imshow('Video', frame)
