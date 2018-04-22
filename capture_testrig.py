@@ -58,6 +58,27 @@ class Face:
             ]
         self.facebox_alpha = 1.0
 
+    def recognise(self, frame, collection_id):
+        detected_image = frame[self.top:self.bottom, self.left:self.right]
+        image = {'Bytes': video_frame_to_jpeg_string(detected_image)}
+        try:
+            response = client.search_faces_by_image(
+                CollectionId=collection_id,
+                Image=image,
+                MaxFaces=1
+            )
+        except ClientError as e:
+            print("{}".format(e))
+            return
+
+        if len(response['FaceMatches']) == 1:
+            face_match = response['FaceMatches'][0]
+            face = face_match['Face']
+            self.caption = "{} ({:.2f}%)".format(face['ExternalImageId'], face_match['Similarity'])
+            cv2.imshow(self.caption, detected_image)
+        else:
+            self.caption = "UNKNOWN"
+
     def draw_overlay(self, frame):
         overlay = frame.copy()
         cv2.rectangle(overlay, (self.left, self.top), (self.right, self.bottom), (0, 0, 255), 2)
@@ -66,7 +87,7 @@ class Face:
         if self.landmarks is not None:
             for (x, y) in self.landmarks:
                 cv2.circle(overlay, (x, y), 4, (255, 0, 0), cv2.FILLED)
-        self.facebox_alpha = self.facebox_alpha - 0.1
+        self.facebox_alpha = self.facebox_alpha - 0.05
         cv2.addWeighted(overlay, self.facebox_alpha, frame, 1 - self.facebox_alpha, 0, frame)
 
 
@@ -101,21 +122,11 @@ def index_face(frame, collection_id, face_name):
 def recognise_faces(frame, collection_id, faces):
     image = {'Bytes': video_frame_to_jpeg_string(frame)}
 
-    try:
-        response = client.search_faces_by_image(
-            CollectionId=collection_id,
-            Image=image,
-            MaxFaces=2
-        )
-        print("{}".format(response))
-    except ClientError as e:
-        print("{}".format(e))
-        return
-
-    for face_match in response['FaceMatches']:
-        face = face_match['Face']
-        caption = "{} ({:.2f}%)".format(face['ExternalImageId'], face_match['Similarity'])
-        faces.append(Face(caption=caption, box=response['SearchedFaceBoundingBox']))
+    response = client.detect_faces(Image=image)
+    for face_detail in response['FaceDetails']:
+        face = Face(box=face_detail['BoundingBox'])
+        face.recognise(frame, collection_id)
+        faces.append(face)
 
 
 if __name__ == "__main__":
