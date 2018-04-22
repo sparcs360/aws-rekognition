@@ -26,55 +26,68 @@ def video_frame_to_jpeg_string(frame):
     return image_str
 
 
+def detect_objects(frame):
+    print('Detecting objects...')
+    request = create_rekognition_request(image_data=video_frame_to_jpeg_string(frame))
+    response = client.detect_labels(Image=request)
+    for object in response['Labels']:
+        print("{} = {:.2f}%".format(object['Name'], object['Confidence']))
+
+
+class Face:
+    def __init__(self, face_detail):
+        bounding_box = face_detail['BoundingBox']
+        self.top = int(bounding_box['Top'] * HEIGHT)
+        self.left = int(bounding_box['Left'] * WIDTH)
+        width = int(bounding_box['Width'] * WIDTH)
+        height = int(bounding_box['Height'] * HEIGHT)
+        self.right = self.left + width
+        self.bottom = self.top + height
+        self.facebox_alpha = 1.0
+
+
+def detect_faces(frame, faces):
+    print('Detecting faces...')
+    request = create_rekognition_request(image_data=video_frame_to_jpeg_string(frame))
+    response = client.detect_faces(Image=request)
+    for face_detail in response['FaceDetails']:
+        faces.append(Face(face_detail))
+
+
 if __name__ == "__main__":
     client = create_rekognition_client()
     video_capture = cv2.VideoCapture(0)
     FONT = cv2.FONT_HERSHEY_DUPLEX
     WIDTH = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     HEIGHT = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    facebox_alpha = 0.0
+
+    faces = []
 
     while True:
-
         ret, frame = video_capture.read()
-        # print("ret={}".format(ret))
 
         key = cv2.waitKey(1) & 0xFF
+
         if key == ord('o'):
-            print('Detecting objects...')
-            request = create_rekognition_request(image_data=video_frame_to_jpeg_string(frame))
-            response = client.detect_labels(Image=request)
-            for object in response['Labels']:
-                print("{} = {:.2f}%".format(object['Name'], object['Confidence']))
+            detect_objects(frame)
 
         if key == ord('f'):
-            print('Detecting faces...')
-            request = create_rekognition_request(image_data=video_frame_to_jpeg_string(frame))
-            response = client.detect_faces(Image=request)
-            for face_detail in response['FaceDetails']:
-                bounding_box = face_detail['BoundingBox']
-                print("bounding_box={}".format(bounding_box))
-                top = int(bounding_box['Top'] * HEIGHT)
-                left = int(bounding_box['Left'] * WIDTH)
-                width = int(bounding_box['Width'] * WIDTH)
-                height = int(bounding_box['Height'] * HEIGHT)
-                right = left + width
-                bottom = top + height
-                facebox_alpha = 1.0
-                print("tl=({},{}), br=({},{})".format(top, left, right, bottom))
+            detect_faces(frame, faces)
 
         if key == ord('q'):
             print("Quitting")
             break
 
-        if facebox_alpha > 0:
-            overlay = frame.copy()
-            cv2.rectangle(overlay, (left, top), (right, bottom), (0, 0, 255), 2)
-            cv2.rectangle(overlay, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-            font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(overlay, "face", (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
-            cv2.addWeighted(overlay, facebox_alpha, frame, 1 - facebox_alpha, 0, frame)
-            facebox_alpha = facebox_alpha - 0.01
+        print("face_count={}".format(len(faces)))
+        if faces:
+            for face in faces:
+                overlay = frame.copy()
+                cv2.rectangle(overlay, (face.left, face.top), (face.right, face.bottom), (0, 0, 255), 2)
+                cv2.rectangle(overlay, (face.left, face.bottom), (face.right, face.bottom), (0, 0, 255), cv2.FILLED)
+                cv2.putText(overlay, "face", (face.left + 6, face.bottom - 6), FONT, 1.0, (255, 255, 255), 1)
+                face.facebox_alpha = face.facebox_alpha - 0.01
+                cv2.addWeighted(overlay, face.facebox_alpha, frame, 1 - face.facebox_alpha, 0, frame)
+            faces = [face for face in faces if face.facebox_alpha > 0]
 
         cv2.imshow('Video', frame)
 
