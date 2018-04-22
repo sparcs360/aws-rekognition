@@ -3,62 +3,30 @@ import cv2
 import numpy as np
 import boto3
 
-def create_rekognition_client(region = 'eu-west-1'):
 
+def create_rekognition_client(region='eu-west-1'):
     return boto3.client('rekognition', region)
 
 
 def create_rekognition_request(bucket='lnewfeld', filename=None, image_data=None):
-
     if not ((filename is None) ^ (image_data is None)):
         raise ValueError("filename xor image_data must be provided")
-    
-    if (image_data is None):
-        request = {'S3Object': {'Bucket':bucket, 'Name':filename}}
+
+    if image_data is None:
+        request = {'S3Object': {'Bucket': bucket, 'Name': filename}}
     else:
         request = {'Bytes': image_data}
 
-    #print("{}".format(image))
     return request
 
 
-def detect_objects(client, bucket='lnewfeld', filename=None, image_data=None):
-
-    if not ((filename is None) ^ (image_data is None)):
-        raise ValueError("filename xor image_data must be provided")
-    
-    if (image_data is None):
-        image = {'S3Object': {'Bucket':bucket, 'Name':filename}}
-    else:
-        image = {'Bytes': image_data}
-
-    #print("{}".format(image))
-    return client.detect_labels(Image = image)
-
-
-def detect_faces(client, bucket='lnewfeld', filename=None, image_data=None):
-
-    if not ((filename is None) ^ (image_data is None)):
-        raise ValueError("filename xor image_data must be provided")
-    
-    if (image_data is None):
-        image = {'S3Object': {'Bucket':bucket, 'Name':filename}}
-    else:
-        image = {'Bytes': image_data}
-
-    #print("{}".format(image))
-    return client.detect_faces(Image = image)
-
- 
 def video_frame_to_jpeg_string(frame):
     ret, jpeg = cv2.imencode('.jpg', frame)
-    #print("ret={}, jpeg={}".format(ret, jpeg))
     image_str = np.array(jpeg).tostring()
     return image_str
 
 
 if __name__ == "__main__":
-
     client = create_rekognition_client()
     video_capture = cv2.VideoCapture(0)
     FONT = cv2.FONT_HERSHEY_DUPLEX
@@ -69,23 +37,23 @@ if __name__ == "__main__":
     while True:
 
         ret, frame = video_capture.read()
-        #print("ret={}".format(ret))
+        # print("ret={}".format(ret))
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('o'):
             print('Detecting objects...')
             request = create_rekognition_request(image_data=video_frame_to_jpeg_string(frame))
-            response = client.detect_labels(Image = request)
+            response = client.detect_labels(Image=request)
             for object in response['Labels']:
-                print ("{} = {:.2f}%".format(object['Name'], object['Confidence']))
+                print("{} = {:.2f}%".format(object['Name'], object['Confidence']))
 
         if key == ord('f'):
             print('Detecting faces...')
             request = create_rekognition_request(image_data=video_frame_to_jpeg_string(frame))
-            response = client.detect_faces(Image = request)
+            response = client.detect_faces(Image=request)
             for face_detail in response['FaceDetails']:
                 bounding_box = face_detail['BoundingBox']
-                print ("bounding_box={}".format(bounding_box))
+                print("bounding_box={}".format(bounding_box))
                 top = int(bounding_box['Top'] * HEIGHT)
                 left = int(bounding_box['Left'] * WIDTH)
                 width = int(bounding_box['Width'] * WIDTH)
@@ -93,16 +61,14 @@ if __name__ == "__main__":
                 right = left + width
                 bottom = top + height
                 facebox_alpha = 1.0
-                print ("tl=({},{}), br=({},{})".format(top, left, right, bottom))
-
+                print("tl=({},{}), br=({},{})".format(top, left, right, bottom))
 
         if key == ord('q'):
             print("Quitting")
-            break;
+            break
 
         if facebox_alpha > 0:
             overlay = frame.copy()
-            
             cv2.rectangle(overlay, (left, top), (right, bottom), (0, 0, 255), 2)
             cv2.rectangle(overlay, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
             font = cv2.FONT_HERSHEY_DUPLEX
@@ -111,6 +77,6 @@ if __name__ == "__main__":
             facebox_alpha = facebox_alpha - 0.01
 
         cv2.imshow('Video', frame)
-            
+
     video_capture.release()
     cv2.destroyAllWindows()
