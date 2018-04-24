@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 import boto3
 from botocore.exceptions import ClientError
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 
 def parse_command_line():
@@ -42,25 +44,29 @@ def detect_objects(frame):
 
 
 class Face:
-    def __init__(self, box, caption="", landmarks=None):
-        self.top = int(box['Top'] * HEIGHT)
-        self.left = int(box['Left'] * WIDTH)
-        width = int(box['Width'] * WIDTH)
-        height = int(box['Height'] * HEIGHT)
+    def __init__(self, image, box, caption="", landmarks=None):
+        image_height, image_width, _ = image.shape
+
+        self.top = int(max(0, box['Top'] * image_height))
+        self.left = int(max(0, box['Left'] * image_width))
+        width = int(box['Width'] * image_width)
+        height = int(box['Height'] * image_height)
         self.right = self.left + width
         self.bottom = self.top + height
+        print("({},{})-({},{})".format(self.top,self.left, self.right,self.bottom))
+        self.image = image[self.top:self.bottom, self.left:self.right]
+
         self.caption = caption
         if landmarks is None:
             self.landmarks = None
         else:
             self.landmarks = [
-                (int(landmark['X'] * WIDTH), int(landmark['Y'] * HEIGHT)) for landmark in landmarks
+                (int(landmark['X'] * image_width), int(landmark['Y'] * image_height)) for landmark in landmarks
             ]
         self.facebox_alpha = 1.0
 
-    def recognise(self, frame, collection_id):
-        detected_image = frame[self.top:self.bottom, self.left:self.right]
-        image = {'Bytes': video_frame_to_jpeg_string(detected_image)}
+    def recognise(self, collection_id):
+        image = {'Bytes': video_frame_to_jpeg_string(self.image)}
         try:
             response = client.search_faces_by_image(
                 CollectionId=collection_id,
@@ -76,12 +82,11 @@ class Face:
             face_match = response['FaceMatches'][0]
             face = face_match['Face']
             self.caption = "{} ({:.2f}%)".format(face['ExternalImageId'], face_match['Similarity'])
-            cv2.imshow(self.caption, detected_image)
         else:
             self.caption = "UNKNOWN"
 
-    def draw_overlay(self, frame):
-        overlay = frame.copy()
+    def draw_overlay(self, image):
+        overlay = image.copy()
         cv2.rectangle(overlay, (self.left, self.top), (self.right, self.bottom), (0, 0, 255), 2)
         cv2.rectangle(overlay, (self.left, self.bottom), (self.right, self.bottom), (0, 0, 255), cv2.FILLED)
         cv2.putText(overlay, self.caption, (self.left + 6, self.bottom - 6), FONT, 0.5, (255, 255, 255), 1)
@@ -89,22 +94,24 @@ class Face:
             for (x, y) in self.landmarks:
                 cv2.circle(overlay, (x, y), 4, (255, 0, 0), cv2.FILLED)
         self.facebox_alpha = self.facebox_alpha - 0.05
-        cv2.addWeighted(overlay, self.facebox_alpha, frame, 1 - self.facebox_alpha, 0, frame)
+        cv2.addWeighted(overlay, self.facebox_alpha, image, 1 - self.facebox_alpha, 0, image)
 
 
 def detect_faces(frame, faces):
     image = {'Bytes': video_frame_to_jpeg_string(frame)}
+    start = time.time()
     response = client.detect_faces(Image=image)
+    print("detect_faces: {}".format(time.time() - start))
     for face_detail in response['FaceDetails']:
-        faces.append(Face(box=face_detail['BoundingBox'], landmarks=face_detail['Landmarks']))
+        faces.append(Face(frame, box=face_detail['BoundingBox'], landmarks=face_detail['Landmarks']))
 
 
-def index_face(frame, collection_id, face_name):
+def index_face(image, collection_id, face_name):
     if face_name == "NOONE":
         print("Can't index unless you specify --face-name")
         return
 
-    image = {'Bytes': video_frame_to_jpeg_string(frame)}
+    image = {'Bytes': video_frame_to_jpeg_string(image)}
 
     response = client.detect_faces(Image=image)
     if len(response['FaceDetails']) != 1:
@@ -122,24 +129,39 @@ def index_face(frame, collection_id, face_name):
 
 def recognise_faces(frame, collection_id, faces):
     image = {'Bytes': video_frame_to_jpeg_string(frame)}
-
+    start = time.time()
     response = client.detect_faces(Image=image)
-    for face_detail in response['FaceDetails']:
-        face = Face(box=face_detail['BoundingBox'])
-        face.recognise(frame, collection_id)
+    print("detect_faces: {}".format(time.time() - start))
+    details = response['FaceDetails']
+
+    def recognise(box):
+        face = Face(frame, box=box)
+        start = time.time()
+        face.recognise(collection_id)
+        print("- recognise: {}".format(time.time() - start))
+        return face
+
+    start = time.time()
+    futures = {executor.submit(recognise, detail['BoundingBox']): detail for detail in details}
+    for future in as_completed(futures):
+        face = future.result()
         faces.append(face)
+        cv2.imshow(face.caption, face.image)
+    print("recognise_total: {}".format(time.time() - start))
 
 
 if __name__ == "__main__":
     args = parse_command_line()
 
+    #boto3.set_stream_logger(name='botocore')
+
     client = create_rekognition_client(args.region)
     video_capture = cv2.VideoCapture(0)
     FONT = cv2.QT_FONT_NORMAL
-    WIDTH = int(video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    HEIGHT = int(video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     faces = []
+
+    executor = ThreadPoolExecutor()
 
     while True:
         ret, frame = video_capture.read()
@@ -161,6 +183,17 @@ if __name__ == "__main__":
         if key == ord('r'):
             print('Looking for known faces...')
             recognise_faces(frame, args.collection_id, faces)
+
+        if key == ord('t'):
+            print('Looking for known faces in croud.jpg...')
+            static_image = cv2.imread("croud.jpg")
+            cv2.imshow("Croud...", static_image)
+            croud_faces = []
+            #detect_faces(static_image, croud_faces)
+            recognise_faces(static_image, args.collection_id, croud_faces)
+            for lee in croud_faces:
+                lee.draw_overlay(static_image)
+            cv2.imshow("Croud...", static_image)
 
         if key == ord('q'):
             print("Quitting")
